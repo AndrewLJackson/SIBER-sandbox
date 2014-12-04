@@ -1,0 +1,77 @@
+# ------------------------------------------------------------------------------
+# JAGS code for fitting Cholesky version of SIBER
+# ------------------------------------------------------------------------------
+
+#BUGS code for the Cholesky decomposition of 3 x 3 covariance matrix
+#Becoming 2 x 2 matrix
+#
+# Andrew: im not entirely sure if this code actually works anymore.
+
+model {
+
+# ----------------------------------
+# define the priors
+# ----------------------------------
+
+# this loop defines the priors for the means
+for (i in 1:n.iso){
+  mu[i] ~ dnorm (0, 1.0E-6)
+}
+
+
+
+# AJ - i am pretty sure the priors for the precision and covariance
+# matrices are defined below amidst the code.
+
+#tau <- pow(sigma, -2)  # convert to precision inverse(sigma^2)
+#sigma ~ dunif (0, 100) 
+# uniform prior on SD of the residual error term
+
+#----------------------------------------------------
+# specify the likelihood of the observed data
+#----------------------------------------------------
+
+for (i in 1:n.obs) {                             
+  Y[i,1:2] ~ dmnorm(mu[1:n.iso],tau[1:n.iso,1:n.iso])
+}
+
+
+#for datapoint i and columns 1 to 2
+
+
+# And now specify the priors
+
+# Construct the covariance matrix as V=D%*%L%*%t(L)%*%D
+# STEP 1
+for ( j in 1:n.iso ) {
+
+# sd.a[j] <- sqrt(tau[j,j])
+# ? not actually part of cholesky decomp?
+
+D[j,j] ~ dnorm(0,0.45)I(0,) # each entry in D is truncated normal (+ve)
+#should be I or T?, may not make difference in JAGS
+  L[j,j] <- 1
+  for ( k in 1:n.iso ) {
+    C[j,k] <- inprod(D[j,1:n.iso],L[1:n.iso,k]) # this is C=D%*%L
+    Sigma2[j,k] <- inprod(C[j,1:n.iso],C[k,1:n.iso]) # this is V=C%*%t(C)
+  }
+}
+
+# STEP 2
+# this is then recalculating the lower triangle
+# AJ - this would need to be looped to make it generalisable to more than
+# two dimensions.
+D[1,2] <- 0 ; D[2,1] <- 0
+L[2,1] ~ dnorm(0,4) ; L[1,2] <- 0
+
+# after steps 1 & 2, the precision matrix is formed as inverse(sigma^2)
+tau <- inverse(Sigma2[1:n.iso,1:n.iso])
+#inverse of covariance matrix
+
+# these lines are not part of the cholesky, and instead calculated
+# the correlation coefficients which i guess have been used
+# to compare performances of different parameterisations of the 
+# Sigma matrices.
+rho <- Sigma2[1,2]/sqrt(Sigma2[1,1]*Sigma2[2,2])
+
+} # end of model 
