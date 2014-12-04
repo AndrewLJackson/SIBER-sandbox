@@ -11,8 +11,8 @@ library(R2jags)
 # change this line
 #setwd("c:/rtemp")
 
-source("SEA_fitting.r")
-source("BUGS_models.r")
+source("SEA_fitting.R")
+source("BUGS_models.R")
 
 # ------------------------------------------------------------------------------
 
