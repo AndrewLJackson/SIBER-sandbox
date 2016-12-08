@@ -1,0 +1,140 @@
+---
+title: "Individual Ellipse as Proportion of Group"
+author: "Andrew L Jackson"
+date: "12/8/2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## The problem
+
+We want to calculate the proportional ellipse area attributable to an individual who is part of a group. We can easily calculate an ellipse for an individual, but comparing that to a measure of the entire group's isotopic niche is not straight forward. Here we will estimate the group's niche as being the outer most shape describing the collection of ellipses for all the individuals.
+
+The data (simulated) comprises 10 individuals with 5 observations per invididual
+
+```{r data}
+rm(list = ls())
+
+library(SIBER)
+library(viridis)
+library(spatstat)
+
+
+set.seed(2)
+
+raw.data <- generateSiberCommunity(n.groups = 10, community.id = 1, 
+                                 n.obs = 5, 
+                                 mu.range = c(-1, 1, -1, 1))
+
+siber.example <- createSiberObject(raw.data)
+
+
+par(mfrow=c(1,1))
+
+community.hulls.args <- list(col = 1, lty = 1, lwd = 1)
+group.ellipses.args  <- list(n = 100, p.interval = 0.95, lty = 1, lwd = 2)
+group.hull.args      <- list(lty = 2, col = "grey20")
+
+# this time we will make the points a bit smaller by 
+# cex = 0.5
+plotSiberObject(siber.example,
+                ax.pad = 2, 
+                hulls = F, community.hulls.args, 
+                ellipses = T, group.ellipses.args,
+                group.hulls = F, group.hull.args,
+                bty = "L",
+                iso.order = c(1,2),
+                xlab=expression({delta}^13*C~'\u2030'),
+                ylab=expression({delta}^15*N~'\u2030'),
+                cex = 0.5
+)
+
+```
+
+However, we need to fit the ellipses seperately to each group, store the coordinates taht define them and then use a function to calculate the outer most area which is the minimum convex hull for the points that make up all the ellipses drawn together. We then need to calculate the proportion of each individual ellipse to this group-level shape. This requires looping over the data. NB this code needs a dummy plot to work. The development version of SIBER has a do.plot = F option to negate this fudge so just ignore this plot that is produced for now.
+
+```{r all.ellipses}
+
+# "groups" in this context actually refer to individuals
+
+coords <- list() # a list to store our ellipses
+owin.coords <- list()
+
+# how many points to create to draw each ellipse?
+points.per.ellipse = 100
+
+# this code needs a dummy plot to work
+# (development version of SIBER has a do.plot = F option to negate this fudge)
+
+plot(0,0)
+
+for (i in 1:siber.example$n.groups[2]){
+  
+  coords[[i]] <- addEllipse(siber.example$ML.mu[[1]][ , , i],
+                     siber.example$ML.cov[[1]][ , , i],
+                     m = NULL,
+                     n = points.per.ellipse,
+                     p.interval = 0.95,
+                     ci.mean = FALSE,
+                     col = i,
+                     lty = 3,
+                     lwd = 2)
+  
+  # store them as owin class polygons which is what will do all the 
+  # shape comparison
+  owin.coords[[i]] <- owin(poly = list(x=coords[[i]][,1], y=coords[[i]][,2]))
+
+  
+}
+
+# now cacluate the union of all these ellipses. In order to pass all our
+# owin.coords objects, we need to use do.call rather than calling the function
+# as we usually would: normally we would write union.owin(A,B,C)
+
+boundaries <- do.call("union.owin", owin.coords)
+
+par(mfrow = c(1,2))
+
+# plot the original ellipses
+plotSiberObject(siber.example,
+                ax.pad = 2, 
+                hulls = F, community.hulls.args, 
+                ellipses = T, list(n = 100, p.interval = 0.95, lty = 1, lwd = 2),
+                group.hulls = F, group.hull.args,
+                bty = "L",
+                iso.order = c(1,2),
+                xlab=expression({delta}^13*C~'\u2030'),
+                ylab=expression({delta}^15*N~'\u2030'),
+                cex = 0.5
+)
+
+
+# plot the outer boundary which is the union of all the ellipses we created
+# NB the axes limits are likely a bit off so its not entirely to scale
+plot(boundaries)
+
+
+```
+
+Now it remains to calculate the area of this encompassing shape, and divide each internal ellipse by this area
+
+```{R proportions}
+total.area <- area(boundaries)
+
+ellipse.areas <- unlist(lapply(owin.coords, area))
+
+prop.areas <- ellipse.areas / total.area
+
+print(prop.areas)
+
+```
+
+The rounded (to 2 decimal places) areas are:
+
+```{R print}
+print(round(prop.areas, 2))
+```
+
