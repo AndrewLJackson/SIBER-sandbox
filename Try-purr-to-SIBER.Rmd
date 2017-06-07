@@ -1,0 +1,76 @@
+---
+title: "Attempt to see if i can use purrr to SIBER"
+output: html_notebook
+---
+
+```{r setup}
+
+library(purrr)
+library(magrittr)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(SIBER)
+```
+
+Now load the bundled dataset and plot with ggplot2
+
+```{r load-and-plot}
+
+data("demo.siber.data")
+
+mydata <- demo.siber.data
+
+rm(demo.siber.data)
+
+head(mydata)
+
+mydata$group <- factor(mydata$group)
+mydata$community <- factor(mydata$community)
+
+mydata <- rename(mydata, x = iso1, y = iso2)
+
+
+plot.raw.data <- ggplot(data = mydata, 
+                        mapping = aes(x, y, 
+                                      group = community:group,
+                                      color = community:group)) + 
+  geom_point()
+
+print(plot.raw.data)
+
+```
+
+Now try to fit ellipses by calling `fitEllipse` directly via `purrr::map`. First we set some priors and fitting parameters.
+
+```{r set-priors-and-parms}
+
+# options for running jags
+parms <- list()
+parms$n.iter <- 2 * 10^4   # number of iterations to run the model for
+parms$n.burnin <- 1 * 10^3 # discard the first set of values
+parms$n.thin <- 10     # thin the posterior by this many
+parms$n.chains <- 3        # run this many chains
+
+# define the priors
+priors <- list()
+priors$R <- 1 * diag(2)
+priors$k <- 2
+priors$tau.mu <- 1.0E-3
+
+
+```
+
+Now fit an ellipse to each `group:community` combination
+
+```{r purrr-fit}
+
+source("fitEllipseMap.R")
+
+ellipse.models <- mydata %>% split(.$community:.$group) %>% 
+  map(fitEllipseMap, parms =  parms, priors = priors)
+
+# back.trans <- map(ellipse.models, )
+
+```
+
