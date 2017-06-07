@@ -41,6 +41,18 @@ print(plot.raw.data)
 
 ```
 
+```{r generate-stats-and-zscore}
+
+mu.raw <- mydata %>% split(.$community:.$group) %>% 
+  map(~colMeans(cbind(.$x, .$y)))
+      
+sigma.raw <- mydata %>% split(.$community:.$group) %>% 
+  map(~cov(cbind(.$x, .$y)))
+      
+
+```
+
+
 Now try to fit ellipses by calling `fitEllipse` directly via `purrr::map`. First we set some priors and fitting parameters.
 
 ```{r set-priors-and-parms}
