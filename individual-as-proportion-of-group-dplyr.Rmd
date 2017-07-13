@@ -1,0 +1,112 @@
+---
+title: "Individual Ellipse as Proportion of Group"
+author: "Andrew L Jackson"
+date: "12/8/2016"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Try to do this with dplyr for tidyness.
+
+## The problem
+
+We want to calculate the proportional ellipse area attributable to an individual who is part of a group. We can easily calculate an ellipse for an individual, but comparing that to a measure of the entire group's isotopic niche is not straight forward. Here we will estimate the group's niche as being the outer most shape describing the collection of ellipses for all the individuals.
+
+The data (simulated) comprises 10 individuals with 5 observations per invididual
+
+```{r data}
+rm(list = ls())
+
+library(SIBER)
+library(viridis)
+library(spatstat)
+library(tidyverse)
+
+set.seed(2)
+
+raw.data <- generateSiberCommunity(n.groups = 10, community.id = 1, 
+                                 n.obs = 5, 
+                                 mu.range = c(-1, 1, -1, 1))
+
+
+
+
+muSigma <- function(dd){
+  out <- list()
+  out$mu <- dd %>% select(iso1, iso2) %>% colMeans()
+  out$Sigma <- dd %>% select(iso1, iso2) %>% cov()
+}
+
+calcBoundaries <- function(dd){
+  
+  mu <- dd %>% ungroup() %>% select(iso1, iso2) %>% colMeans()
+  
+  Sigma <- dd %>% ungroup() %>% select(iso1, iso2) %>% cov()
+  
+  out <- addEllipse(mu, Sigma,
+                         m = NULL,
+                         n = 360,
+                         p.interval = 0.95,
+                         ci.mean = FALSE,
+                         col = i,
+                         lty = 3,
+                         lwd = 2)
+  
+  return(data.frame(out))
+}
+
+# apply our function to each gruop to calcluate the ellipse boundaries
+ellCoords <- raw.data %>% group_by(group) %>% do(calcBoundaries(.))
+
+# convert to owin format which needs to go into a list
+
+ellCoords.list <- ellCoords %>% split(.$group) 
+
+# %>% map(owin(poly = list(x = unlist(.$X1), y = unlist(.$X2) )))
+
+aa <- ellCoords %>% split(.$group)
+
+# should be able to do this with purr::map() but its not passing
+# .$X1 and .$X2 correctly as ive coded it.
+owin.coords <- list()
+
+for (i in 1:length(ellCoords.list)){
+  
+  xx <- unlist(ellCoords.list[[i]][,2])
+  yy <- unlist(ellCoords.list[[i]][,3])
+  
+  owin.coords[[i]] <- owin(poly = list(x = xx, 
+                                     y = yy)) 
+  
+}
+
+
+boundaries <- do.call("union.owin", owin.coords)
+
+plot(boundaries)
+
+```
+
+
+Now it remains to calculate the area of this encompassing shape, and divide each internal ellipse by this area
+
+```{R proportions}
+total.area <- area(boundaries)
+
+ellipse.areas <- unlist(lapply(owin.coords, area))
+
+prop.areas <- ellipse.areas / total.area
+
+print(prop.areas)
+
+```
+
+The rounded (to 2 decimal places) areas are:
+
+```{R print}
+print(round(prop.areas, 2))
+```
+
