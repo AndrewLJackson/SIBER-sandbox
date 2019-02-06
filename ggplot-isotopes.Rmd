@@ -1,0 +1,165 @@
+---
+title: "SIA biplots using ggplot2"
+author: "Andrew L Jackson & Chris Harrod"
+date: "`r Sys.Date()`"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width = 9, fig.height = 6)
+```
+
+Import the data as before. Note that we get some warnings from both that "objects are masked from" various packages. This is because the packages we have just loaded have functions of the same name as those that have already been loaded (usually ones from the base R packages). This warning is telling us that, in the case of `filter`, when we simply call `filter()`, we will be using the last loaded one, i.e. from `dplyr`, rather than the one from `stats`. If you want to force R to use a particular function from a particular package you can write the long form, `dplyr::filter()` or `stats::filter()`. In many ways, it is good practice to always use this format, but in reality we are all lazy.
+
+This example uses the dataset `demo.siber.data` that is included with the SIBER package and on which many of the inherent examples and vignettes are based.
+
+```{r import-data}
+
+#install.packages("tidyverse")
+
+library(tidyverse)
+library(SIBER)
+
+# import the data. 
+# If you get an error about "No such file or directory" then you 
+# need to take care about where R is currently working, and where your 
+# data file is in relation to this.
+data("demo.siber.data")
+
+# verify that our data looks correct by printing the first1 10 lines
+# to screen
+head(demo.siber.data)
+
+# check the structure of the data
+str(demo.siber.data)
+
+# one thing with this dataset that is not ideal for use with ggplot is 
+# that the group and community vectors are integers rather than factors.
+# Here I make a copy of this data into an object called "mydata" and 
+# convert these two to factor type.
+mydata <- demo.siber.data
+mydata <- mutate(mydata, group = factor(group), community = factor(community))
+
+# if the data is not a massive dataset, you might like to look  
+# at it all
+# print(mydata)
+```
+
+The graphics that are part of "base R" are not very pretty (or at least some people think so - I quite like them to be honest). Another one of Hadley Wickham's very popular packages is `ggplot2` which by default makes some very blog-friendly graphics. And of course you can change the theme (template) on them to get something more suitable for publication (and fashion seems to be changing here too).
+
+In ggplot2, figures are created in layer, by first creating a basic layer of axes according to an "aesthetic" which is then used as a framework to add points and lines and other embellishments. If you push the layers into an object using the `<-` assignment as I have done here, then you will need to `print()` your figure to get it to render.
+
+It is *_very important_* to note early on that we have something of an annoying naming issue with the variable names used in SIBER to by default denote "groups" and "communities" with ggplot2 which uses `group = ... ` as a function argument within `aes()` to denote how to apply colours and apply statistics to different collections of data points. At times in the code below, we will see `group = interaction(community, group)` where the `group` on the left side of the = refers to the argument in `ggplot(aes(group = ...))` and the `group` on the right hand side of the = referring to the name of the column of data in the parent dataframe. The function `interaction(community, group)` is useful for creating unique groups based on a combination of the community and group label identifiers.
+
+```{r first-gg}
+
+first.plot <- ggplot(data = mydata, aes(iso1, iso2)) +
+  geom_point(aes(color = group, shape = community), size = 2)+
+  ylab(expression(paste(delta^{15}, "N (\u2030)")))+
+  xlab(expression(paste(delta^{13}, "C (\u2030)"))) + 
+  theme(text = element_text(size=15))
+print(first.plot)
+
+```
+
+If you want to use the more normal plotting format for journals without gridlines, and without the light-grey background, you add `theme_classic()` to your plot. This is a shortcut to some default settings of the myriad options available in `theme()` which we used above to increase the text size in our plot.
+
+```{r classic-theme}
+
+classic.first.plot <- first.plot + theme_classic() + 
+  theme(text = element_text(size=15))
+print(classic.first.plot)
+
+# options to add to point the axis tick marks inwards
+# theme(axis.ticks.length = unit(0.1, "cm"))
+```
+
+
+# Errorbar biplots
+
+Adding the means and error bars in both directions to create the classic isotope biplot requires adding these as additional layers. We could re-write all the lines of code for the original plot above, or we can simply create a new ggplot object based on the original, and then add the layers we want, and print. We need some summary data for each of the groups to plot the intervals: we use `dplyr::summarise` as in the previous script today except this time we store the output into a new object which I call `sbg`. When we add the layers for the means and the errorbars, we need to tell the layers to use a new aesthetic mapping using the new x and y data: `mapping = aes(x = mC, y = mN, ...)`.
+
+```{r classic-biplot}
+
+# Summarise By Group (sbg)
+# here I name the mean of iso1 as mC for meanCarbon, and similarly for 
+# sdC, and mN, sdN in the produced table.
+sbg <- mydata %>% group_by(community, group) %>% 
+  summarise(count = length(community),
+            mC = mean(iso1), 
+            sdC = sd(iso1), 
+            mN = mean(iso2), 
+            sdN = sd(iso2) )
+
+
+# make a copy of the first.plot object
+# second.plot <- first.plot
+
+# add the layers using the summary data in sbg
+# in the calls to geom_errorbar and geom_errorbarh we use the option
+# `inherit.aes = FALSE` in order to allow us to specify a new aesthetic 
+# mapping. If we dont do this, we either get warnings such as 
+# "Ignoring unknown aesthetics: y" or errors that expected objects iso1 or 
+# iso2 are not found as they have been inherited from the parent plot 
+# first.plot, but are not contained in the data.frame sbg we created just above
+# for the errorbar summaries.
+second.plot <- first.plot + 
+  geom_point(data = sbg, aes(mC, mN, group = interaction(community, group)), 
+             color = "black", shape = 22, size = 5,
+             alpha = 0.7) +
+  geom_errorbar(data = sbg, 
+                mapping = aes(x = mC,
+                              ymin = mN - 1.96*sdN, 
+                              ymax = mN + 1.96*sdN), 
+                width = 0, inherit.aes = FALSE) +
+  geom_errorbarh(data = sbg, 
+                 mapping = aes(y = mN,
+                               xmin = mC - 1.96*sdC,
+                               xmax = mC + 1.96*sdC),
+                 height = 0, inherit.aes = FALSE)
+
+print(second.plot)
+  
+```
+
+## Ellipses instead of errorbars
+
+The ggplot2 function `stat_ellipse` allows us to easily add ellipses, of varying **level** which corresponds to the prediction interval. This function defaults to using the t-distribution so we will override this and specify the normal distribution as is more fitting with the SIBER approach. We can also change the colour palettes used for the color of objects, and fills. I favour the "viridis" package for this, and use the discrete scale versions `scale_colour_viridis_d()` here as we have categorical groups specified here as "community" and "group". I find the last colour of this spectrum which is a plain yellow, does not render very well, especially with the fill overlaying the points and so choose to end its palette at 0.9 with `end = 0.9`.
+
+```{r nice-ellipses}
+# use our ellipse function to generate the ellipses for plotting
+
+# decide how big an ellipse you want to draw
+p.ell <- 0.70 
+
+# create our plot based on first.plot above
+# adding the stat_ellipse() geometry. We 
+# specify thee ellipse to be plotted using 
+# the polygon geom, with fill and edge colour
+# defined by Taxon as a grouping variable, 
+# using the normal distribution and with 
+# a quite high level of transparency.
+ellipse.plot <- first.plot + 
+  stat_ellipse(aes(group = interaction(community, group), 
+                   fill = group, 
+                   color = group), 
+               alpha = 0.2, 
+               level = p.ell,
+               type = "norm",
+               geom = "polygon") + 
+  scale_colour_viridis_d(end = 0.9) + 
+  scale_fill_viridis_d(end = 0.9)
+
+print(ellipse.plot)
+
+
+```
+
+
+## Trouble shooting
+
+If the permil symbol `r "\u2030"` is not showing correctly (and instead is printing as $\text{\u2030}$ in your plot it is likely because your computer is not set up to use UTF-8 format character encoding. This is not a problem with your setup of R or Rstudio, but is deeper in your computer. It is fixed by changing the region or locale settings on your computer. You can access these in the system preferences area of your computer's operating system. To check if your computer is set up to identify and interpret UTF-8 encoding, you can type `sessionInfo()` in the R console. You should see something like this: `en_IE.UTF-8/en_IE.UTF-8/en_IE.UTF-8/C/en_IE.UTF-8/en_IE.UTF-8` under the heading "locale". On my machine, this indicates that it is use english (en), for Ireland (IE) and the UTF-8 encoding format. If the UTF-8 format is missing from your `sessionInfo()` then you could try changing your operating system to a locale similar to your own region's location and see if the UTF-8 format is supported there.
+
+
+
+
