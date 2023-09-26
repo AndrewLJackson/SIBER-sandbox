@@ -1,0 +1,152 @@
+---
+title: "Emmi Kurosawa's spring/fall data"
+output: html_notebook
+---
+
+
+I am going to analyse these data with simmr instead of mixsiar for speed for model fitting.
+
+## Setup
+
+```{r}
+library(simmr)
+library(tidyverse)
+```
+
+## Import the data
+
+```{r}
+
+mix_fall      <- read_csv("mix_Fall.csv") %>% as.matrix()
+mix_spring    <- read_csv("mix_Spring.csv") %>% as.matrix()
+
+source_fall   <- read_csv("source_Fall.csv")
+source_spring <- read_csv("source_Spring.csv")
+
+tdfs          <- read_csv("tef.csv")
+
+```
+
+Extract data to simmr formatting requirements
+
+```{r}
+src_mean_fall <- source_fall %>% select(Meand13C, Meand15N) %>%
+  as.matrix()
+src_mean_spring <- source_spring %>% select(Meand13C, Meand15N) %>%
+  as.matrix()
+
+src_sd_fall <- source_fall %>% select(SDd13C, SDd15N) %>%
+  as.matrix()
+src_sd_spring <- source_spring %>% select(SDd13C, SDd15N) %>%
+  as.matrix()
+
+src_names_fall <- source_fall$Sources
+src_names_spring <- source_spring$Sources
+
+tdf_means <- tdfs %>% select(Meand13C, Meand15N) %>% as.matrix()
+tdf_sds   <- tdfs %>% select(SDd13C, SDd15N) %>% as.matrix()
+
+```
+
+
+## Create the simmr objects
+
+First we can do "Fall".
+
+```{r}
+
+simmr_in_fall <- simmr_load(
+  mixtures = mix_fall,
+  source_names     = src_names_fall,
+  source_means     = src_mean_fall,
+  source_sds       = src_sd_fall,
+  correction_means = tdf_means,
+  correction_sds   = tdf_sds
+  )
+
+
+plot(simmr_in_fall)
+```
+Second we can do "Spring".
+
+```{r}
+
+
+simmr_in_spring <- simmr_load(
+  mixtures = mix_spring,
+  source_names     = src_names_spring,
+  source_means     = src_mean_spring,
+  source_sds       = src_sd_spring,
+  correction_means = tdf_means,
+  correction_sds   = tdf_sds
+  )
+
+
+plot(simmr_in_spring)
+```
+
+## Fit the models
+
+```{r}
+
+custom_mcmc <- list(iter = 100000, 
+                    burn = 1000, 
+                    thin = 10, 
+                    n.chain = 4)
+
+simmr_out_fall <- simmr_mcmc(simmr_in_fall, 
+                             mcmc_control = custom_mcmc)
+simmr_out_spring <- simmr_mcmc(simmr_in_spring, 
+                               mcmc_control = custom_mcmc)
+
+
+```
+
+## Check the outputs
+
+check convergence which all seems fine except the estimated residual error terms which are quite high. But lets keep going for now, as an even longer run should fix this. 
+
+```{r}
+# Check convergence - values should all be close to 1
+summary(simmr_out_fall, type = "diagnostics")
+summary(simmr_out_spring, type = "diagnostics")
+
+```
+
+Look at output
+
+
+```{r}
+summary(simmr_out_fall, type = "statistics")
+summary(simmr_out_spring, type = "statistics")
+```
+
+Plot outputs
+```{r}
+plot(simmr_out_fall, type = "histogram")
+plot(simmr_out_spring, type = "histogram")
+```
+
+
+There is good evidence of the posteriors diverging from the priors indicating the data is overriding the priors. Only Ref.Plant in Fall seems to be almost identical to its prior. 
+
+```{r}
+# Look at influence of priors
+prior_viz(simmr_out_fall)
+prior_viz(simmr_out_spring)
+
+```
+Check the correlations among the posterior proportions
+
+```{r}
+plot(simmr_out_fall, type = "matrix")
+plot(simmr_out_spring, type = "matrix")
+
+```
+
+
+
+
+
+
+

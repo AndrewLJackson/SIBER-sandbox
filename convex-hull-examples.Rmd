@@ -1,0 +1,123 @@
+---
+title: "Overlap of convex hulls"
+output: html_notebook
+---
+
+
+## Setup
+
+```{r}
+library(tidyverse)
+library(magrittr)
+library(SIBER)
+```
+
+## Load data
+
+here we use built in data from SIBER
+
+```{r}
+data(demo.siber.data)
+
+# we dont actually have to create the siber object to calculate hulls and hull areas
+# my.siber.data <- createSiberObject(demo.siber.data)
+
+```
+
+
+
+## Extract coordintates of each hull for each community (or group if you prefer)
+
+SIBER generally uses convex hulls when comparing entire communities with the hull drawn between the centroids of each group. But of course, one can construct hulls around each group either. 
+
+### Community Hulls
+
+```{r}
+
+
+# we write a wrapper function to call siberConvexhull and extract
+# only the xy coordinates as a data.frame
+hullCoords <- function(x){
+  tmp <- siberConvexhull(x$iso1, x$iso2)
+  out <- data.frame(x = tmp$xcoords, 
+                    y = tmp$ycoords)
+  return(out)
+}
+
+# take the raw isotope data, split by community, apply the our wrapper
+# function to each of the splits.
+comm_hulls <- demo.siber.data %>% 
+  split(.$community) %>%
+  map(hullCoords) 
+
+
+# plot to make sure an overlap comparison makes sense
+g1 <- ggplot(data = comm_hulls %>% bind_rows(.id = "community"),
+             mapping = aes(x = x, y = y, 
+                           group = community, 
+                           color = community,
+                           fill = community)) + 
+  geom_polygon(alpha = 0.5)
+print(g1)
+
+# now we can calculate overlap between our two hulls
+hull_overlap <- abs(spatstat.utils::overlap.xypolygon(
+  list(x = comm_hulls[[1]][,1], 
+       y = comm_hulls[[1]][,2]), 
+  list(x = comm_hulls[[2]][,1], 
+       y = comm_hulls[[2]][,2]
+       )
+  ))
+
+print(hull_overlap)
+  
+
+```
+
+### Group hulls
+
+This obviously creates many more pairwise comparisons that one could potentially make and here we only look at one or two examples even though we generate all hulls. In this example, only one of the pairings overlaps.
+
+```{r}
+
+
+
+
+# take the raw isotope data, split by community and group, 
+# apply the our wrapper function to each of the splits.
+group_hulls <- demo.siber.data %>% 
+  split(~.$community + .$group) %>%
+  map(hullCoords) 
+
+
+# plot to make sure our comparison makes sense
+g2 <- ggplot(data = group_hulls %>% bind_rows(.id = "community_group"),
+             mapping = aes(x = x, y = y, 
+                           group = community_group, 
+                           color = community_group,
+                           fill = community_group)) + 
+  geom_polygon(alpha = 0.5)
+print(g2)
+
+# now we can calculate overlap between our two hulls
+# it helps to now define the two groups outside
+h1 <- "1.2" # community 1, group 1
+h2 <- "1.3" # community 2, group 1 
+hull_overlap <- abs(spatstat.utils::overlap.xypolygon(
+  list(x = group_hulls[[h1]][,1], 
+       y = group_hulls[[h1]][,2]), 
+  list(x = group_hulls[[h2]][,1], 
+       y = group_hulls[[h2]][,2]
+       )
+  ))
+  
+print(hull_overlap)
+
+
+
+```
+
+
+
+
+

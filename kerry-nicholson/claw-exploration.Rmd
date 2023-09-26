@@ -1,0 +1,101 @@
+---
+title: "Claw analysis"
+output: html_notebook
+author: Andrew L Jackson
+---
+
+
+
+Attempt to get to the bottom of the data patterns and Kerry's concerns.
+
+## Setup
+
+```{r}
+library(SIBER)
+library(tidyverse)
+```
+
+
+## Import data
+
+```{r}
+
+data <- read_csv("SI 18MAR22 TipBaseMid.csv")
+names(data)
+
+claw_df <- as.data.frame(select(data, iso1, iso2, group, community))
+
+```
+
+## Plot the raw data
+```{r}
+
+g1 <- ggplot(data = claw_df, 
+             mapping = aes(x = iso1, y = iso2, 
+                           color = group,
+                           shape = community)) + 
+  geom_point() + 
+  stat_ellipse(aes(linetype = community))
+
+print(g1)
+
+```
+
+## Imoprt to SIBER and generate some basic stats
+
+```{r}
+siber_claw<-createSiberObject(claw_df)
+
+siber_claw$sample.sizes
+
+
+
+```
+
+
+plot the siber object to visualise both the community and group data to make sense of the statistics
+
+```{r}
+
+plotSiberObject(siber_claw, 
+                hulls = TRUE, 
+                ellipses = TRUE)
+
+```
+
+From this is appears that the East community of points has a larger triangle joining the midpoints of its three ellipses compared with the West community which is so small its practically a line. This suggests that almost all the community metrics will be larger for East than West. The community metrics are based on the mid-points of each group within a community, not the entire set of points that make up that community: the reasons for this are articulated in the original paper. 
+
+On the other hand, the ellipses for West are much larger than East and so the group level metrics will follow that pattern of West > East. 
+
+## Thoughts
+
+perhaps you intended the community metrics to be calculated on each of the ellipses? I would recommend this for reasons articulated int he original paper, but it _is_ possible to do it computationally
+
+
+```{r}
+
+# split the claw data into a list by both group and community.
+list_claw <- claw_df %>% 
+  split(interaction(.$group, .$community)) #%>% map(laymanMetrics(x = .$iso1, y = .$iso2))
+
+
+# preallocate group_layman as an empty list and name it same as list_claw
+group_layman <- vector("list", length(list_claw))
+names(group_layman) <- names(list_claw)
+
+# loop over all the group-community combiations and calculate the layman metrics
+for (i in 1:length(list_claw)){
+  
+  tmp <- list_claw[[i]]
+  group_layman[[i]] <- laymanMetrics(tmp$iso1, tmp$iso2)
+  
+  
+}
+
+
+print(group_layman)
+
+```
+
+
+
